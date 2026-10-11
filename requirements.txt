@@ -1,0 +1,5 @@
+tensorflow[and-cuda]>=2.12.0, <2.16.0
+datasets
+transformers
+numpy
+mwparserfromhell
