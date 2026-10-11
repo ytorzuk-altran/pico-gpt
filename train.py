@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from model import build_decoder_only_transformer
-from dataset_pipeline import build_dataset_pipeline
+from arithmetic_dataet import build_dataset_pipeline
 from transformers import AutoTokenizer
 import argparse
 import os
