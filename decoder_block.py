@@ -25,12 +25,12 @@ class DecoderBlock(layers.Layer):
         # Attention + Residual
         attn_output = self.mha(inputs)
         attn_output = self.dropout1(attn_output, training=training)
-        out1 = self.layernorm1(inputs + attn_output)
+        out1 = self.layernorm1(tf.cast(inputs + attn_output, tf.float32))
         
         # FFN + Residual
-        ffn_output = self.ffn(out1)
+        ffn_output = self.ffn(tf.cast(out1, self.compute_dtype))
         ffn_output = self.dropout2(ffn_output, training=training)
-        return self.layernorm2(out1 + ffn_output)
+        return tf.cast(self.layernorm2(tf.cast(out1 + ffn_output, tf.float32)), self.compute_dtype)
 
     def get_config(self):
         config = super().get_config()

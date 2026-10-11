@@ -35,7 +35,7 @@ def build_decoder_only_transformer(
     )(inputs)
     
     # 3. Position Encoding
-    x = x * tf.math.sqrt(tf.cast(embedding_len, tf.float32))
+    x = x * tf.cast(tf.math.sqrt(tf.cast(embedding_len, tf.float32)), x.dtype)
     x = PositionEncoder(
         seq_len=max_len, 
         embedding_len=embedding_len, 

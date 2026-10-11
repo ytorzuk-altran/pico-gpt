@@ -28,6 +28,11 @@ class PositionEncoder(layers.Layer):
         seq_len = tf.shape(inputs)[1]
         return inputs + self.pos_encoding[tf.newaxis, :seq_len, :]
     
+    def compute_output_shape(self, input_shape):
+        # Keras 3 will read this instead of trying to auto-trace the sparse tensor.
+        # It returns the exact shape of your output dense tensor.
+        return input_shape 
+    
     def get_config(self):
         config = super().get_config()
         config.update({

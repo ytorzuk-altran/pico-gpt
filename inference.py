@@ -2,14 +2,23 @@ import tensorflow as tf
 import numpy as np
 import argparse
 from transformers import AutoTokenizer
-from position_encoder import PositionEncoder
-from attention import MultiheadAttention
-from decoder_block import DecoderBlock
+from model import build_decoder_only_transformer
+import os
 
 # =====================================================================
 # 1. HYPERPARAMETERS & CONFIGURATION
 # =====================================================================
+# =====================================================================
+# 1. HYPERPARAMETERS & CONFIGURATION
+# =====================================================================
+# Model Dimensions
 MAX_LEN = 128              # Maximum context window (sequence length)
+EMBEDDING_LEN = 256
+HEAD_NUM = 8
+FF_DIM = EMBEDDING_LEN * 4
+NUM_BLOCKS = 8
+
+checkpoint_dir = "./training_checkpoints"
 
 def generate_text(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7, top_k=40):
     """
@@ -97,30 +106,39 @@ def main():
         type=str, 
         help="Prompt to miniGPT."
     )
+    parser.add_argument("--checkpoint", type=str, help="Load model from checkpoint")
     args = parser.parse_args()
     print("\nBuilding your mini GPT-style Transformer...")
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
-    custom_layer_dict = {
-        "PositionEncoder": PositionEncoder,
-        "MultiheadAttention": MultiheadAttention,
-        "DecoderBlock": DecoderBlock
-    }
-    checkpoint_path = "./training_checkpoints/mini_gpt_epoch_15_loss_4.4983.h5"
-    print(f"Loading custom Transformer checkpoint from: {checkpoint_path}...")
-    loaded_model = tf.keras.models.load_model(
-        checkpoint_path,
-        custom_objects=custom_layer_dict
+    
+    mini_gpt = build_decoder_only_transformer(
+        vocab_size=tokenizer.vocab_size, # Use the tokenizer's exact vocab size
+        max_len=MAX_LEN,
+        embedding_len=EMBEDDING_LEN,
+        head_num=HEAD_NUM,
+        ff_dim=FF_DIM,
+        num_blocks=NUM_BLOCKS
     )
-    output = generate_text(
-        model=loaded_model,
-        tokenizer=tokenizer,
-        prompt=args.prompt,
-        max_new_tokens=40,
-        temperature=1.1,
-        top_k=20
+    # Compile using SparseCategoricalCrossentropy with from_logits=True
+    mini_gpt.compile(
+        optimizer=tf.keras.optimizers.AdamW(learning_rate=2e-4, weight_decay=0.01),
+        loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+        metrics=["accuracy"]
     )
-    print(output)
+    
+    if args.checkpoint:
+        print("Loading weights...")
+        mini_gpt.load_weights(os.path.join(checkpoint_dir, args.checkpoint))
+        output = generate_text(
+            model=mini_gpt,
+            tokenizer=tokenizer,
+            prompt=args.prompt,
+            max_new_tokens=40,
+            temperature=1.1,
+            top_k=20
+        )
+        print(output)
 
 if __name__ == "__main__":
     main()

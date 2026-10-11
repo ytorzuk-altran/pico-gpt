@@ -1,5 +1,7 @@
-tensorflow[and-cuda]>=2.12.0, <2.16.0
+tensorflow[and-cuda]>=2.12.0
 datasets
 transformers
 numpy
 mwparserfromhell
+tensorboard
+tensorboard-plugin-profile

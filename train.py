@@ -1,9 +1,6 @@
 import tensorflow as tf
 import numpy as np
 from model import build_decoder_only_transformer
-from position_encoder import PositionEncoder
-from attention import MultiheadAttention
-from decoder_block import DecoderBlock
 from dataset_pipeline import build_dataset_pipeline
 from transformers import AutoTokenizer
 import argparse
@@ -33,7 +30,13 @@ checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
     verbose=1
 )
 
+tensorboard_callback = tf.keras.callbacks.TensorBoard(
+    log_dir="./logs", 
+    profile_batch="1, 2"  # Profile steps 10 through 20
+)
+
 def main():
+    tf.keras.mixed_precision.set_global_policy('mixed_float16')
     parser = argparse.ArgumentParser(
         description="A script launching miniGPT training."
     )
@@ -47,33 +50,27 @@ def main():
     
     train_dataset = build_dataset_pipeline(tokenizer, MAX_LEN + 1)
     print("Pipeline constructed successfully!")
+    print(f"Vocabulary size is {tokenizer.vocab_size}")
+    
+    print("Building mini GPT-style Transformer...")
+    mini_gpt = build_decoder_only_transformer(
+        vocab_size=tokenizer.vocab_size, # Use the tokenizer's exact vocab size
+        max_len=MAX_LEN,
+        embedding_len=EMBEDDING_LEN,
+        head_num=HEAD_NUM,
+        ff_dim=FF_DIM,
+        num_blocks=NUM_BLOCKS
+    )
+    # Compile using SparseCategoricalCrossentropy with from_logits=True
+    mini_gpt.compile(
+        optimizer=tf.keras.optimizers.AdamW(learning_rate=2e-4, weight_decay=0.01),
+        loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+        metrics=["accuracy"]
+    )
     
     if args.checkpoint:
-        print("Loading mini GPT-style Transformer...")
-        custom_layer_dict = {
-            "PositionEncoder": PositionEncoder,
-            "MultiheadAttention": MultiheadAttention,
-            "DecoderBlock": DecoderBlock
-        }
-        mini_gpt = tf.keras.models.load_model(
-            os.path.join(checkpoint_dir, args.checkpoint),
-            custom_objects=custom_layer_dict)
-    else:
-        print("Building mini GPT-style Transformer...")
-        mini_gpt = build_decoder_only_transformer(
-            vocab_size=tokenizer.vocab_size, # Use the tokenizer's exact vocab size
-            max_len=MAX_LEN,
-            embedding_len=EMBEDDING_LEN,
-            head_num=HEAD_NUM,
-            ff_dim=FF_DIM,
-            num_blocks=NUM_BLOCKS
-        )
-        # Compile using SparseCategoricalCrossentropy with from_logits=True
-        mini_gpt.compile(
-            optimizer=tf.keras.optimizers.AdamW(learning_rate=2e-4, weight_decay=0.01),
-            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-            metrics=["accuracy"]
-        )
+        print("Loading weights...")
+        mini_gpt.load_weights(os.path.join(checkpoint_dir, args.checkpoint))
 
     steps_per_epoch = 1000
 
