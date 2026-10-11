@@ -38,8 +38,9 @@ def build_dataset_pipeline(tokenizer, CHUNK_LEN, BATCH_SIZE = 64, BUFFER_SIZE = 
         for i, example in enumerate(raw_dataset):
             if i >= max_articles_to_process:
                 break
+            article = cleanup_wikimedia_text(str(example["text"]))
             # Safe string conversion and encoding
-            tokens = tokenizer.encode(str(example["text"]), add_special_tokens=False)
+            tokens = tokenizer.encode(article, add_special_tokens=False)
             token_buffer.extend(tokens)
             
         # Trim to fit exactly into CHUNK_LEN increments
