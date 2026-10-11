@@ -5,6 +5,7 @@ from dataset_pipeline import build_dataset_pipeline
 from transformers import AutoTokenizer
 import argparse
 import os
+import sys
 
 # =====================================================================
 # 1. HYPERPARAMETERS & CONFIGURATION
@@ -62,8 +63,12 @@ def main():
         num_blocks=NUM_BLOCKS
     )
     # Compile using SparseCategoricalCrossentropy with from_logits=True
+    if sys.platform == "darwin":
+        optimizer = tf.keras.optimizers.Adam(learning_rate=2e-4)
+    else:
+        optimizer=tf.keras.optimizers.AdamW(learning_rate=2e-4, weight_decay=0.01)
     mini_gpt.compile(
-        optimizer=tf.keras.optimizers.AdamW(learning_rate=2e-4, weight_decay=0.01),
+        optimizer=optimizer,
         loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         metrics=["accuracy"]
     )
