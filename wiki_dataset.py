@@ -23,22 +23,23 @@ def cleanup_wikimedia_text(text):
     text = re.sub(r'\{\|.*', '', text) # Wiki tables
     return text
 
+def get_training_text(max_articles_to_process=50000):
+    # Load with streaming=False but pick a fixed number of rows for a massive text pool
+    raw_dataset = load_dataset("wikimedia/wikipedia", "20231101.en", split="train", streaming=False)        
+    for i, example in enumerate(raw_dataset):
+        if i >= max_articles_to_process:
+            break
+        article = cleanup_wikimedia_text(str(example["text"]))
+        yield article
+
 def build_dataset_pipeline(tokenizer, CHUNK_LEN, BATCH_SIZE = 64, BUFFER_SIZE = 500000, CACHE_FILE = "wikipedia_processed_tokens.npy"):
     # =====================================================================
     # STEP 1: ONE-TIME SECURE PRE-PROCESSING (Safely isolated from TF Graphs)
     # =====================================================================
     if not os.path.exists(CACHE_FILE):
         print("Tokenizing a batch of Wikipedia in an isolated step to prevent GIL crashes...")
-        # Load with streaming=False but pick a fixed number of rows for a massive text pool
-        raw_dataset = load_dataset("wikimedia/wikipedia", "20231101.en", split="train", streaming=False)
-        
         token_buffer = []
-        max_articles_to_process = 50000  # Generates plenty of training steps for a small model
-        
-        for i, example in enumerate(raw_dataset):
-            if i >= max_articles_to_process:
-                break
-            article = cleanup_wikimedia_text(str(example["text"]))
+        for article in get_training_text():
             # Safe string conversion and encoding
             tokens = tokenizer.encode(article, add_special_tokens=False)
             token_buffer.extend(tokens)
