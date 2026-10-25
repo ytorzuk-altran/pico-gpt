@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import argparse
-from transformers import AutoTokenizer
+from tokenizer import build_tokenizer
 from model import build_decoder_only_transformer
 import os
 
@@ -33,7 +33,7 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7, 
         top_k (int): Limits sampling pool to the top N most probable tokens.
     """
     # 1. Convert text prompt into raw token IDs
-    input_ids = tokenizer.encode(prompt, add_special_tokens=False)
+    input_ids = tokenizer(prompt).numpy().tolist()
     
     print(f"--- Generating text for prompt: '{prompt}' ---")
     
@@ -90,11 +90,12 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7, 
         input_ids.append(int(next_token_id))
         
         # Optional early stopping: break if model predicts the End-Of-Sequence token
-        if next_token_id == tokenizer.eos_token_id:
+        if next_token_id == 0:
             break
             
     # 8. Decode the complete array of token IDs back into readable English text
-    generated_text = tokenizer.decode(input_ids, skip_special_tokens=True)
+    vocab = tokenizer.get_vocabulary()
+    generated_text = " ".join([vocab[idx] for idx in input_ids])
     return generated_text
 
 def main():
@@ -109,11 +110,10 @@ def main():
     parser.add_argument("--checkpoint", type=str, help="Load model from checkpoint")
     args = parser.parse_args()
     print("\nBuilding your mini GPT-style Transformer...")
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer = build_tokenizer()
     
     mini_gpt = build_decoder_only_transformer(
-        vocab_size=tokenizer.vocab_size, # Use the tokenizer's exact vocab size
+        vocab_size=tokenizer.vocabulary_size(),
         max_len=MAX_LEN,
         embedding_len=EMBEDDING_LEN,
         head_num=HEAD_NUM,

@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 from model import build_decoder_only_transformer
 from wiki_dataset import build_dataset_pipeline
-from transformers import AutoTokenizer
+from tokenizer import build_tokenizer
 import argparse
 import os
 import sys
@@ -46,16 +46,15 @@ def main():
     parser.add_argument("--initial_epoch", type=int, default=0, help="Initial epoch")
     args = parser.parse_args()
     
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer = build_tokenizer()
     
     train_dataset = build_dataset_pipeline(tokenizer, MAX_LEN + 1)
     print("Pipeline constructed successfully!")
-    print(f"Vocabulary size is {tokenizer.vocab_size}")
+    print(f"Vocabulary size is {tokenizer.vocabulary_size()}")
     
     print("Building mini GPT-style Transformer...")
     mini_gpt = build_decoder_only_transformer(
-        vocab_size=tokenizer.vocab_size, # Use the tokenizer's exact vocab size
+        vocab_size=tokenizer.vocabulary_size(),
         max_len=MAX_LEN,
         embedding_len=EMBEDDING_LEN,
         head_num=HEAD_NUM,

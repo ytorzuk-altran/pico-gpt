@@ -1,0 +1,1 @@
+export HF_DATASETS_OFFLINE=1

@@ -30,6 +30,7 @@ def get_training_text(max_articles_to_process=50000):
         if i >= max_articles_to_process:
             break
         article = cleanup_wikimedia_text(str(example["text"]))
+        print(f'Processing sample #{i} out of {max_articles_to_process}')
         yield article
 
 def build_dataset_pipeline(tokenizer, CHUNK_LEN, BATCH_SIZE = 64, BUFFER_SIZE = 500000, CACHE_FILE = "wikipedia_processed_tokens.npy"):
@@ -41,8 +42,8 @@ def build_dataset_pipeline(tokenizer, CHUNK_LEN, BATCH_SIZE = 64, BUFFER_SIZE = 
         token_buffer = []
         for article in get_training_text():
             # Safe string conversion and encoding
-            tokens = tokenizer.encode(article, add_special_tokens=False)
-            token_buffer.extend(tokens)
+            tokens = tokenizer(article)
+            token_buffer.extend(tokens.numpy())
             
         # Trim to fit exactly into CHUNK_LEN increments
         num_chunks = len(token_buffer) // CHUNK_LEN
