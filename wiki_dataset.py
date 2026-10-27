@@ -5,6 +5,72 @@ import mwparserfromhell
 from datasets import load_dataset
 import os
 
+class WikiDataset:
+    TRAIN_CACHE_FILE = "wikipedia_training_tokens.npy"
+    VALIDATE_CACHE_FILE = "wikipedia_validation_tokens.npy"
+
+    def __init__(self, tokenizer, seq_len):
+        self.build_token_matrix(tokenizer, seq_len, WikiDataset.TRAIN_CACHE_FILE, 0, 50000)
+        self.build_token_matrix(tokenizer, seq_len, WikiDataset.VALIDATE_CACHE_FILE, 50000, 1000)
+
+    def build_token_matrix(self, tokenizer, seq_len, cache_file, start_from, samples_num):
+        chunk_len = seq_len + 1
+        if not os.path.exists(cache_file):
+            print("Tokenizing Wikipedia...")
+            token_buffer = []
+            for article in get_training_text(start_from=start_from, max_articles_to_process=samples_num):
+                # Safe string conversion and encoding
+                tokens = tokenizer(article)
+                token_buffer.extend(tokens.numpy())            
+            # Trim to fit exactly into chunk_len increments
+            num_chunks = len(token_buffer) // chunk_len
+            token_buffer = token_buffer[:num_chunks * chunk_len]        
+            # Reshape to a clean 2D NumPy array: [Chunks, 129]
+            token_matrix = np.array(token_buffer, dtype=np.int32).reshape(-1, chunk_len)        
+            print(f"Successfully processed {token_matrix.shape[0]} fragments!")
+            np.save(cache_file, token_matrix)
+            print(f"Saved token matrix to disk: {cache_file}")
+
+    def split_input_target(self, chunk):
+        inputs = chunk[:-1]
+        targets = chunk[1:]
+        return inputs, targets
+    
+    def get_training_dataset(self, batch_size = 64, buffer_size = 500000):
+        token_matrix = np.load(WikiDataset.TRAIN_CACHE_FILE)
+        dataset = tf.data.Dataset.from_tensor_slices(token_matrix)
+        return (
+            dataset
+            .map(self.split_input_target, num_parallel_calls=tf.data.AUTOTUNE)
+            .shuffle(buffer_size=buffer_size, reshuffle_each_iteration=True)
+            .batch(batch_size, drop_remainder=True)
+            .prefetch(tf.data.AUTOTUNE)
+        )
+
+    def get_validation_dataset(self, batch_size = 64, buffer_size = 500000):
+        token_matrix = np.load(WikiDataset.VALIDATE_CACHE_FILE)
+        dataset = tf.data.Dataset.from_tensor_slices(token_matrix)
+        return (
+            dataset
+            .map(self.split_input_target, num_parallel_calls=tf.data.AUTOTUNE)
+            .shuffle(buffer_size=buffer_size, reshuffle_each_iteration=True)
+            .batch(batch_size, drop_remainder=True)
+            .prefetch(tf.data.AUTOTUNE)
+        )
+
+def get_training_text(start_from=0, max_articles_to_process=50000):
+    # Load with streaming=False but pick a fixed number of rows for a massive text pool
+    raw_dataset = load_dataset("wikimedia/wikipedia", "20231101.en", split='train', streaming=False)
+    up_to = start_from + max_articles_to_process
+    for i, example in enumerate(raw_dataset):
+        if i < start_from:
+            continue
+        if i >= up_to:
+            break
+        article = cleanup_wikimedia_text(str(example["text"]))
+        print(f'Processing sample #{i-start_from} out of {max_articles_to_process}')
+        yield article
+
 def cleanup_wikimedia_text(text):
     wikicode = mwparserfromhell.parse(text)
     text = wikicode.strip_code()
@@ -22,60 +88,3 @@ def cleanup_wikimedia_text(text):
     # Remove corrupted dangling brackets
     text = re.sub(r'\{\|.*', '', text) # Wiki tables
     return text
-
-def get_training_text(max_articles_to_process=50000):
-    # Load with streaming=False but pick a fixed number of rows for a massive text pool
-    raw_dataset = load_dataset("wikimedia/wikipedia", "20231101.en", split="train", streaming=False)        
-    for i, example in enumerate(raw_dataset):
-        if i >= max_articles_to_process:
-            break
-        article = cleanup_wikimedia_text(str(example["text"]))
-        print(f'Processing sample #{i} out of {max_articles_to_process}')
-        yield article
-
-def build_dataset_pipeline(tokenizer, CHUNK_LEN, BATCH_SIZE = 64, BUFFER_SIZE = 500000, CACHE_FILE = "wikipedia_processed_tokens.npy"):
-    # =====================================================================
-    # STEP 1: ONE-TIME SECURE PRE-PROCESSING (Safely isolated from TF Graphs)
-    # =====================================================================
-    if not os.path.exists(CACHE_FILE):
-        print("Tokenizing a batch of Wikipedia in an isolated step to prevent GIL crashes...")
-        token_buffer = []
-        for article in get_training_text():
-            # Safe string conversion and encoding
-            tokens = tokenizer(article)
-            token_buffer.extend(tokens.numpy())
-            
-        # Trim to fit exactly into CHUNK_LEN increments
-        num_chunks = len(token_buffer) // CHUNK_LEN
-        token_buffer = token_buffer[:num_chunks * CHUNK_LEN]
-        
-        # Reshape to a clean 2D NumPy array: [Chunks, 129]
-        token_matrix = np.array(token_buffer, dtype=np.int32).reshape(-1, CHUNK_LEN)
-        
-        print(f"Successfully processed {token_matrix.shape[0]} training fragments!")
-        np.save(CACHE_FILE, token_matrix)
-        print(f"Saved token matrix to disk: {CACHE_FILE}")
-
-    # =====================================================================
-    # STEP 2: LOADING COMPACT TOKENS DIRECTLY THROUGH PURE TENSORFLOW
-    # =====================================================================
-    print("Loading token data safely into pure native TensorFlow...")
-    token_matrix = np.load(CACHE_FILE)
-
-    # Create a dataset directly from the clean numerical array (No raw strings or networking)
-    dataset = tf.data.Dataset.from_tensor_slices(token_matrix)
-
-    def split_input_target(chunk):
-        inputs = chunk[:-1]
-        targets = chunk[1:]
-        return inputs, targets
-
-    # Formulate the high-performance training pipeline
-    return (
-        dataset
-        .map(split_input_target, num_parallel_calls=tf.data.AUTOTUNE)
-    #    .repeat()
-        .shuffle(buffer_size=BUFFER_SIZE, reshuffle_each_iteration=True)
-        .batch(BATCH_SIZE, drop_remainder=True)
-        .prefetch(tf.data.AUTOTUNE)
-    )

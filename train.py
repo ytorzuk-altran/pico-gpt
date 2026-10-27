@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from model import build_decoder_only_transformer
-from wiki_dataset import build_dataset_pipeline
+from wiki_dataset import WikiDataset
 from tokenizer import build_tokenizer
 import argparse
 import os
@@ -47,8 +47,8 @@ def main():
     args = parser.parse_args()
     
     tokenizer = build_tokenizer()
-    
-    train_dataset = build_dataset_pipeline(tokenizer, MAX_LEN + 1)
+
+    dataset = WikiDataset(tokenizer=tokenizer, seq_len=MAX_LEN)
     print("Pipeline constructed successfully!")
     print(f"Vocabulary size is {tokenizer.vocabulary_size()}")
     
@@ -80,7 +80,8 @@ def main():
 
     print(f"\nStarting pre-training for {args.epochs} epochs...")
     mini_gpt.fit(
-        train_dataset,
+        dataset.get_training_dataset(),
+        validation_data=dataset.get_validation_dataset(),
         epochs=args.epochs,
         steps_per_epoch=steps_per_epoch,
         initial_epoch=args.initial_epoch,

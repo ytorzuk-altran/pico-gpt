@@ -1,5 +1,5 @@
 .venv
 __pycache__
 training_checkpoints
-wikipedia_processed_tokens.npy
-arithmetic_processed_tokens.npy
+*.npy
+vocab.json
